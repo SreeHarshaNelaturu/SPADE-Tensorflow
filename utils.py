@@ -110,7 +110,7 @@ class Image_data:
         print()
 
 def load_segmap(image, img_width, img_height, img_channel):
-    segmap_label_path = '/home/harsha/Documents/SPADE_FACE/og_spade/dataset/spade_celebA/segmap_label.txt'
+    segmap_label_path = './dataset/spade_celebA/segmap_label.txt'
 
     with open(segmap_label_path, 'r') as f:
         color_value_dict = literal_eval(f.read())
@@ -120,12 +120,12 @@ def load_segmap(image, img_width, img_height, img_channel):
 
     if img_channel == 1:
         #segmap_img = cv2.imread(image_path, flags=cv2.IMREAD_GRAYSCALE)
-        segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
+        segmap_img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    #else:
         #segmap_img = cv2.imread(image_path, flags=cv2.IMREAD_COLOR)
-        segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        #segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-
+    segmap_img = image
     segmap_img = cv2.resize(segmap_img, dsize=(img_width, img_height), interpolation=cv2.INTER_NEAREST)
 
     if img_channel == 1:
@@ -155,10 +155,10 @@ def load_style_image(image, img_width, img_height, img_channel):
     if img_channel == 1:
         #img = cv2.imread(image_path, flags=cv2.IMREAD_GRAYSCALE)
         img = cv2.cvtColor(image, cv2.COLOR_BG2GRAY)
-    else :
+    #else :
         #img = cv2.imread(image_path, flags=cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    #img = image
+        #img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    img = image
     img = cv2.resize(img, dsize=(img_width, img_height))
 
     if img_channel == 1:
