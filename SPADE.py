@@ -5,80 +5,71 @@ from tensorflow.contrib.data import prefetch_to_device, shuffle_and_repeat, map_
 import numpy as np
 from tqdm import tqdm
 from vgg19_keras import VGGLoss
+import tensorflow as tf
+import os
+#from utils import str2bool
+
 
 class SPADE(object):
-    def __init__(self, sess, args):
+    def __init__(self, sess):
 
         self.model_name = 'SPADE'
-
+        #self.segmap_in = segmap_in
         self.sess = sess
-        self.checkpoint_dir = args.checkpoint_dir
-        self.result_dir = args.result_dir
-        self.log_dir = args.log_dir
-        self.dataset_name = args.dataset
-        self.augment_flag = args.augment_flag
+        #self.checkpoint_dir = checkpoint
+        self.result_dir = 'results'
+        self.log_dir = "logs"
+        self.dataset_name = "spade_celebA"
+        self.augment_flag = True
 
-        self.epoch = args.epoch
-        self.iteration = args.iteration
-        self.decay_flag = args.decay_flag
-        self.decay_epoch = args.decay_epoch
+        self.gan_type = 'hinge'
 
-        self.gan_type = args.gan_type
+        self.TTUR = True
+        self.ch = 64
+        self.batch_size =1
 
-        self.batch_size = args.batch_size
-        self.print_freq = args.print_freq
-        self.save_freq = args.save_freq
-
-        self.init_lr = args.lr
-        self.TTUR = args.TTUR
-        self.ch = args.ch
-
-        self.beta1 = args.beta1
-        self.beta2 = args.beta2
-
-
-        self.num_style = args.num_style
-        self.guide_img = args.guide_img
+        self.num_style = 3
+        #self.guide_img = guide_img
 
 
         """ Weight """
-        self.adv_weight = args.adv_weight
-        self.vgg_weight = args.vgg_weight
-        self.feature_weight = args.feature_weight
-        self.kl_weight = args.kl_weight
+        self.adv_weight = 1
+        self.vgg_weight = 10
+        self.feature_weight = 10
+        self.kl_weight = 0.05
 
-        self.ld = args.ld
+        self.ld = 10.0
 
         """ Generator """
-        self.num_upsampling_layers = args.num_upsampling_layers
+        self.num_upsampling_layers = 'more'
 
         """ Discriminator """
-        self.n_dis = args.n_dis
-        self.n_scale = args.n_scale
-        self.n_critic = args.n_critic
-        self.sn = args.sn
+        self.n_dis = 4
+        self.n_scale = 2
+        self.n_critic = 1
+        self.sn = True
 
-        self.img_height = args.img_height
-        self.img_width = args.img_width
+        self.img_height = 256
+        self.img_width = 256
 
-        self.img_ch = args.img_ch
-        self.segmap_ch = args.segmap_ch
+        self.img_ch = 3
+        self.segmap_ch = 3
 
-        self.sample_dir = os.path.join(args.sample_dir, self.model_dir)
-        check_folder(self.sample_dir)
+        #self.sample_dir = os.path.join(args.sample_dir, self.model_dir)
+        #check_folder(self.sample_dir)
 
 
         self.dataset_path = os.path.join('./dataset', self.dataset_name)
 
 
         print()
-
+        #print("checkpoint_dir", self.checkpoint_dir)
         print("##### Information #####")
         print("# gan type : ", self.gan_type)
         print("# dataset : ", self.dataset_name)
         print("# batch_size : ", self.batch_size)
-        print("# epoch : ", self.epoch)
-        print("# iteration per epoch : ", self.iteration)
+        #print("# epoch : ", self.epoch)
+        #print("# iteration per epoch : ", self.iteration)
         print("# TTUR : ", self.TTUR)
 
         print()
@@ -102,8 +93,8 @@ class SPADE(object):
         print("# vgg_weight : ", self.vgg_weight)
         print("# feature_weight : ", self.feature_weight)
         print("# wgan lambda : ", self.ld)
-        print("# beta1 : ", self.beta1)
-        print("# beta2 : ", self.beta2)
+        #print("# beta1 : ", self.beta1)
+        #print("# beta2 : ", self.beta2)
 
         print()
 
@@ -399,90 +390,6 @@ class SPADE(object):
         self.G_loss = tf.summary.merge(g_summary_list)
         self.D_loss = tf.summary.merge(d_summary_list)
 
-    def train(self):
-        # initialize all variables
-        tf.global_variables_initializer().run()
-
-        # saver to save model
-        self.saver = tf.train.Saver(max_to_keep=20)
-
-        # summary writer
-        self.writer = tf.summary.FileWriter(self.log_dir + '/' + self.model_dir, self.sess.graph)
-
-        # restore check-point if it exits
-        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-        if could_load:
-            start_epoch = (int)(checkpoint_counter / self.iteration)
-            start_batch_id = checkpoint_counter - start_epoch * self.iteration
-            counter = checkpoint_counter
-            print(" [*] Load SUCCESS")
-        else:
-            start_epoch = 0
-            start_batch_id = 0
-            counter = 1
-            print(" [!] Load failed...")
-
-        # loop for epoch
-        start_time = time.time()
-        past_g_loss = -1.
-        lr = self.init_lr
-
-        for epoch in range(start_epoch, self.epoch):
-            if self.decay_flag:
-                # lr = self.init_lr * pow(0.5, epoch // self.decay_epoch)
-                lr = self.init_lr if epoch < self.decay_epoch else self.init_lr * (self.epoch - epoch) / (self.epoch - self.decay_epoch)
-            for idx in range(start_batch_id, self.iteration):
-                train_feed_dict = {
-                    self.lr: lr
-                }
-
-                # Update D
-                _, d_loss, summary_str = self.sess.run([self.D_optim, self.d_loss, self.D_loss], feed_dict=train_feed_dict)
-                self.writer.add_summary(summary_str, counter)
-
-                # Update G
-                g_loss = None
-                if (counter - 1) % self.n_critic == 0:
-                    real_x_images, real_x_segmap, fake_x_images, random_fake_x_images, _, g_loss, summary_str = self.sess.run(
-                        [self.real_x, self.real_x_segmap, self.fake_x, self.random_fake_x,
-                         self.G_optim,
-                         self.g_loss, self.G_loss], feed_dict=train_feed_dict)
-
-                    self.writer.add_summary(summary_str, counter)
-                    past_g_loss = g_loss
-
-                # display training status
-                counter += 1
-                if g_loss == None:
-                    g_loss = past_g_loss
-                print("Epoch: [%2d] [%5d/%5d] time: %4.4f d_loss: %.8f, g_loss: %.8f" % (
-                    epoch, idx, self.iteration, time.time() - start_time, d_loss, g_loss))
-
-                if np.mod(idx + 1, self.print_freq) == 0:
-
-                    save_images(real_x_images, [self.batch_size, 1],
-                               './{}/real_{:03d}_{:05d}.png'.format(self.sample_dir, epoch, idx+1))
-
-                    save_images(real_x_segmap, [self.batch_size, 1],
-                                './{}/real_segmap_{:03d}_{:05d}.png'.format(self.sample_dir, epoch, idx + 1))
-
-                    save_images(fake_x_images, [self.batch_size, 1],
-                                './{}/fake_{:03d}_{:05d}.png'.format(self.sample_dir, epoch, idx+1))
-
-                    save_images(random_fake_x_images, [self.batch_size, 1],
-                                './{}/random_fake_{:03d}_{:05d}.png'.format(self.sample_dir, epoch, idx + 1))
-
-
-                if np.mod(counter - 1, self.save_freq) == 0:
-                    self.save(self.checkpoint_dir, counter)
-
-            # After an epoch, start_batch_id is set to zero
-            # non-zero value is only for the first epoch after loading pre-trained model
-            start_batch_id = 0
-
-        # save model for final step
-        self.save(self.checkpoint_dir, counter)
-
     @property
     def model_dir(self):
 
@@ -517,14 +424,13 @@ class SPADE(object):
     def load(self, checkpoint_dir):
         print(" [*] Reading checkpoints...")
         checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
-
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
             self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
             counter = int(ckpt_name.split('-')[-1])
             print(" [*] Success to read {}".format(ckpt_name))
-            return True, counter
+            return True, counter, self.sess
         else:
             print(" [*] Failed to find a checkpoint")
             return False, 0
@@ -533,7 +439,7 @@ class SPADE(object):
         tf.global_variables_initializer().run()
 
         segmap_files = glob('./dataset/{}/{}/*.*'.format(self.dataset_name, 'segmap_test'))
-
+        print(segmap_files)
         self.saver = tf.train.Saver()
         could_load, checkpoint_counter = self.load(self.checkpoint_dir)
         self.result_dir = os.path.join(self.result_dir, self.model_dir)
@@ -572,46 +478,34 @@ class SPADE(object):
 
         index.close()
 
-    def guide_test(self):
-        tf.global_variables_initializer().run()
-
-        segmap_files = glob('./dataset/{}/{}/*.*'.format(self.dataset_name, 'segmap_test'))
-
-        style_image = load_style_image(self.guide_img, self.img_width, self.img_height, self.img_ch)
+    def load_model(self, checkpoint_dir):
 
         self.saver = tf.train.Saver()
-        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-        self.result_dir = os.path.join(self.result_dir, self.model_dir, 'guide')
-        check_folder(self.result_dir)
+        could_load, checkpoint_counter, sess_out = self.load(checkpoint_dir)
 
         if could_load:
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
 
+        return sess_out
+
+
+    """
+    def guide_test(self):
+        
+
+        style_image = load_style_image(self.guide_img, self.img_width, self.img_height, self.img_ch)
+
+        
+
         # write html for visual comparison
-        index_path = os.path.join(self.result_dir, 'index.html')
-        index = open(index_path, 'w')
-        index.write("<html><body><table><tr>")
-        index.write("<th>name</th><th>style</th><th>input</th><th>output</th></tr>")
 
-        for sample_file in tqdm(segmap_files):
-            sample_image = load_segmap(self.dataset_path, sample_file, self.img_width, self.img_height, self.segmap_ch)
-            image_path = os.path.join(self.result_dir, '{}'.format(os.path.basename(sample_file)))
 
-            fake_img = self.sess.run(self.guide_test_fake_x, feed_dict={self.test_segmap_image : sample_image, self.test_guide_image : style_image})
-            save_images(fake_img, [1, 1], image_path)
+        #print(sample_file)
+        sample_image = load_segmap(self.dataset_path, self.segmap_in, self.img_width, self.img_height, self.segmap_ch)
+        image_path = os.path.join(self.result_dir, '{}'.format(os.path.basename("./dataset/spade_celebA/segmap_test/408.jpg")))
 
-            index.write("<td>%s</td>" % os.path.basename(image_path))
-            index.write(
-                "<td><img src='%s' width='%d' height='%d'></td>" % (self.guide_img if os.path.isabs(self.guide_img) else (
-                        '../../..' + os.path.sep + self.guide_img), self.img_width, self.img_height))
-            index.write(
-                "<td><img src='%s' width='%d' height='%d'></td>" % (sample_file if os.path.isabs(sample_file) else (
-                        '../../..' + os.path.sep + sample_file), self.img_width, self.img_height))
-            index.write(
-                "<td><img src='%s' width='%d' height='%d'></td>" % (image_path if os.path.isabs(image_path) else (
-                        '../../..' + os.path.sep + image_path), self.img_width, self.img_height))
-            index.write("</tr>")
-
-        index.close()
+        
+        save_images(fake_img, [1, 1], image_path)
+    """
