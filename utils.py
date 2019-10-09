@@ -110,7 +110,7 @@ class Image_data:
         print()
 
 def load_segmap(image, img_width, img_height, img_channel):
-    segmap_label_path = '/home/harsha/Documents/SPADE_FACE/og_spade/dataset/spade_celebA/segmap_label.txt'
+    segmap_label_path = './dataset/spade_celebA/segmap_label.txt'
 
     with open(segmap_label_path, 'r') as f:
         color_value_dict = literal_eval(f.read())
@@ -120,19 +120,19 @@ def load_segmap(image, img_width, img_height, img_channel):
 
     if img_channel == 1:
         #segmap_img = cv2.imread(image_path, flags=cv2.IMREAD_GRAYSCALE)
-        segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #else :
+        segmap_img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else :
         #segmap_img = cv2.imread(image_path, flags=cv2.IMREAD_COLOR)
-        #segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    segmap_img = image
+        segmap_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    #segmap_img = image
 
     segmap_img = cv2.resize(segmap_img, dsize=(img_width, img_height), interpolation=cv2.INTER_NEAREST)
 
     if img_channel == 1:
         segmap_img = np.expand_dims(segmap_img, axis=-1)
 
-    label_map = convert_from_color_segmentation(color_value_dict, segmap_img, tensor_type=False)
-
+    #label_map = convert_from_color_segmentation(color_value_dict, segmap_img, tensor_type=False)
+    label_map = segmap_img
     segmap_onehot = get_one_hot(label_map, len(color_value_dict))
 
     segmap_onehot = np.expand_dims(segmap_onehot, axis=0)
@@ -154,10 +154,10 @@ def load_style_image(image, img_width, img_height, img_channel):
 
     if img_channel == 1:
         #img = cv2.imread(image_path, flags=cv2.IMREAD_GRAYSCALE)
-        img = cv2.cvtColor(image, cv2.COLOR_BG2GRAY)
+        img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     #else :
         #img = cv2.imread(image_path, flags=cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    #    img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     img = image
     img = cv2.resize(img, dsize=(img_width, img_height))
 
@@ -191,15 +191,18 @@ def augmentation(image, segmap, augment_height, augment_width):
 
     return image, segmap
 
-def save_images(images, size, image_path):
-    return imsave(inverse_transform(images), size, image_path)
+
+def save_images(images, size):
+    return imsave(inverse_transform(images), size)
+
 
 def inverse_transform(images):
     return (images+1.) / 2
 
 
-def imsave(images, size, path):
-    return misc.imsave(path, merge(images, size))
+def imsave(images, size,):
+    return merge(images, size)
+
 
 def merge(images, size):
     h, w = images.shape[1], images.shape[2]
@@ -235,7 +238,7 @@ def convert_from_color_segmentation(color_value_dict, arr_3d, tensor_type=False)
 
     if tensor_type :
         arr_2d = tf.zeros(shape=[tf.shape(arr_3d)[0], tf.shape(arr_3d)[1]], dtype=tf.uint8)
-
+        print(arr_2d)
         for c, i in color_value_dict.items() :
             color_array = tf.reshape(np.asarray(c, dtype=np.uint8), shape=[1, 1, -1])
             condition = tf.reduce_all(tf.equal(arr_3d, color_array), axis=-1)

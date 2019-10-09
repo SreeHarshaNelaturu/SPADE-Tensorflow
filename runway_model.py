@@ -2,20 +2,9 @@ import runway
 from runway.data_types import *
 from SPADE import SPADE
 from utils import *
-import cv2
 import tensorflow as tf
 import numpy as np
-
-
-def load_checkpoint(checkpoint, sess):
-    saver = tf.train.Saver()
-    try:
-        saver.restore(sess, checkpoint)
-        return True
-    except:
-        print("checkpoint %s not loaded correctly" % checkpoint)
-        return False
-
+import os
 
 @runway.setup(options={"checkpoint": runway.file(is_directory=True)})
 def setup(opts):
@@ -25,9 +14,9 @@ def setup(opts):
 
     gan.build_model()
     tf.global_variables_initializer().run(session=sess)
-    sess = gan.load_model(opts["checkpoint"])
+    sess_out = gan.load_model(opts["checkpoint"])
 
-    return sess
+    return sess_out
 
 
 label_to_id = {'background': 0, 'hair': 1, 'skin': 2, 'l_brow': 3, 'r_brow': 4, 'l_eye': 5, 'r_eye': 6, 'nose': 7,
@@ -53,16 +42,24 @@ command_outputs = {
 }
 
 
-@runway.command("spade_face", inputs=command_inputs, outputs=command_outputs, description="spade_face")
-def spade_face(sess, inputs):
-    input_seg = load_segmap(np.array(inputs["semantic_map"]), 256, 256, 3)
-    guide_img = load_style_image(np.array(inputs["style_image"]), 256, 256, 3)
+@runway.command("generate_face", inputs=command_inputs, outputs=command_outputs, description="Generates a face using SPADE")
+def generate_face(sess_out, inputs):
+    segmap_input = np.array(inputs["semantic_map"])
+    style_image = load_style_image(np.array(inputs["style_image"]), 256, 256, 3)
 
-    fake_img = sess.run(gan.guide_test_fake_x, feed_dict={gan.test_segmap_image: input_seg, gan.test_guide_image: guide_img})
+    segmap_onehot = np.eye(19)[segmap_input]
 
-    output = save_images(fake_img, [1,1], "mara_11.jpg")
+    segmap_onehot = np.expand_dims(segmap_onehot, axis=0)
+    print("segmap_output:", segmap_onehot)
+    print("style_image:", style_image)
+
+    fake_img = sess_out.run(gan.guide_test_fake_x, feed_dict={gan.test_segmap_image: segmap_onehot,
+                                                              gan.test_guide_image: style_image})
+
+    output = save_images(fake_img, [1, 1])
     print(output)
-    return output
+    print(" [*] Guide test finished")
+    return {'output': (output * 255).astype(np.uint8)}
 
 
 if __name__ == "__main__":
