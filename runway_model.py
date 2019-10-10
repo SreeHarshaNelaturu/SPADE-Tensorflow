@@ -2,6 +2,7 @@ import runway
 from runway.data_types import *
 from SPADE import SPADE
 from utils import *
+from PIL import Image
 import tensorflow as tf
 import numpy as np
 import os
@@ -44,22 +45,18 @@ command_outputs = {
 
 @runway.command("generate_face", inputs=command_inputs, outputs=command_outputs, description="Generates a face using SPADE")
 def generate_face(sess_out, inputs):
-    segmap_input = np.array(inputs["semantic_map"])
+    original_size = inputs['semantic_map'].size
+    segmap_input = np.array(inputs["semantic_map"].resize((256, 256)))
     style_image = load_style_image(np.array(inputs["style_image"]), 256, 256, 3)
-
     segmap_onehot = np.eye(19)[segmap_input]
-
     segmap_onehot = np.expand_dims(segmap_onehot, axis=0)
-    print("segmap_output:", segmap_onehot)
-    print("style_image:", style_image)
-
     fake_img = sess_out.run(gan.guide_test_fake_x, feed_dict={gan.test_segmap_image: segmap_onehot,
                                                               gan.test_guide_image: style_image})
-
     output = save_images(fake_img, [1, 1])
-    print(output)
     print(" [*] Guide test finished")
-    return {'output': (output * 255).astype(np.uint8)}
+    output = (output * 255).astype(np.uint8)
+    output = Image.fromarray(output).resize(original_size)
+    return {'output': output}
 
 
 if __name__ == "__main__":
